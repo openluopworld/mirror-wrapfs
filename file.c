@@ -42,6 +42,10 @@ static ssize_t wrapfs_write(struct file *file, const char __user *buf,
 	if (err >= 0) {
 		fsstack_copy_inode_size(d_inode(dentry),
 					file_inode(lower_file));
+		/* dest->i_atime = src->i_atime;
+		 * dest->i_mtime = src->i_mtime;
+		 * dest->i_ctime = src->i_ctime;
+		 */
 		fsstack_copy_attr_times(d_inode(dentry),
 					file_inode(lower_file));
 	}
@@ -56,6 +60,17 @@ static int wrapfs_readdir(struct file *file, struct dir_context *ctx)
 	struct dentry *dentry = file->f_path.dentry;
 
 	lower_file = wrapfs_lower_file(file);
+	/*
+	 * VFS          |---------->iterate_dir(fs/readir.c)
+	 *              |               |
+	 *              |               |
+	 *warpfs  wrapfs_readir         |
+	 *                              |
+	 *                              V
+	 *Real FS            file->f_op->iterate
+	 *                   file->f_op->iterate_shared
+	 *                   ----->    readdir
+	 */
 	err = iterate_dir(lower_file, ctx);
 	file->f_pos = lower_file->f_pos;
 	if (err >= 0)		/* copy the atime */
@@ -101,6 +116,7 @@ static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
 	if (lower_file->f_op->compat_ioctl)
 		err = lower_file->f_op->compat_ioctl(lower_file, cmd, arg);
 
+	/* why it is not needed to update attr for the wrapfs inode attributres */
 out:
 	return err;
 }
